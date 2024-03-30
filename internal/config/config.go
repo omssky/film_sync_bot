@@ -5,20 +5,23 @@ import (
 )
 
 type Config struct {
-	BotToken string
+	BotToken string `mapstructure:"BOT_TOKEN"`
 }
 
 func LoadConfig() (*Config, error) {
+	viper.AddConfigPath(".")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
+	viper.AutomaticEnv()
+
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
 	}
 
-	config := &Config{
-		BotToken: viper.GetString("bot_token"),
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, err
 	}
 
-	return config, nil
+	return &config, nil
 }
