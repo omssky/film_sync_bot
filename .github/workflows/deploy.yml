@@ -1,0 +1,47 @@
+name: Build and Publish Docker Image
+
+on:
+  push:
+    branches: ['master']
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  WORKDIR: /deploy/${{ github.event.repository.name }}
+
+jobs:
+  sync:
+    needs: build-and-push-image
+    name: Sync docker-compose and configs via rsync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: rsync deployments
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete --progress --include="*.yaml"  --exclude="*.*"
+          path: /
+          remote_path: ${{ env.WORKDIR }}
+          remote_host: ${{ secrets.SSH_HOST }}
+          remote_user: ${{ secrets.SSH_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+  deploy:
+    needs: sync
+    name: Run latest image on server
+    runs-on: ubuntu-latest
+    steps:
+       - name: Do docker-compose up using SSH key
+         uses: appleboy/ssh-action@v1.0.3
+         with:
+           host: ${{ secrets.SSH_HOST }}
+           username: ${{ secrets.SSH_USER }}
+           key: ${{ secrets.SSH_PRIVATE_KEY }}
+           script: |
+             cd ~/${{ env.WORKDIR }}
+             tree
+             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+             docker system prune -f
+             docker-compose up -d
